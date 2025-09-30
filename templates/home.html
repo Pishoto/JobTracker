@@ -1,0 +1,622 @@
+<head>
+    <!-- Chart.js library -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-datalabels"></script>
+
+    <title>Job Tracker</title>
+    <!-- <link rel="icon" type="image/png" href="https://cdn-icons-png.flaticon.com/512/1864/1864514.png"> -->
+    <link rel="icon" type="image/png" href="https://cdn-icons-png.flaticon.com/512/1436/1436690.png">
+
+    <style>
+        body {
+            background-color: #2e2e2e;
+            /* dark gray */
+            color: #ffffff;
+            /* white text for contrast */
+            font-family: Arial, sans-serif;
+        }
+
+        table {
+            border-collapse: collapse;
+            width: 100%;
+            /* fit width */
+        }
+
+        th,
+        td {
+            border: 1px solid #555;
+            padding: 5px;
+            text-align: center;
+        }
+
+        th {
+            background-color: #444;
+        }
+
+        textarea {
+            background-color: #3a3a3a;
+            color: #fff;
+            border: 1px solid #555;
+        }
+
+        input,
+        select,
+        button {
+            background-color: #3a3a3a;
+            color: #fff;
+            border: 1px solid #555;
+        }
+
+        a {
+            color: #9ecfff;
+        }
+
+        #noResponseDays:disabled {
+            background-color: #eee;
+            color: #bdbdbd;
+        }
+
+        #emailAddress:disabled {
+            background-color: #eee;
+            color: #bdbdbd;
+        }
+
+        #saveEmail:disabled {
+            background-color: #eee;
+            color: #bdbdbd;
+        }
+
+        #emailFormSubmit:disabled {
+            background-color: #eee;
+            color: #bdbdbd;
+        }
+    </style>
+</head>
+
+<body>
+    <!-- Title -->
+    <h1>Welcome to Job Tracker!</h1>
+
+    <!-- Divide to left and right sides -->
+    <div id="application_form" style="display: flex; align-items: flex-start; gap: 40px;">
+
+        <!-- Add application -->
+        <div style="flex: 3; display: flex; flex-direction: column; gap: 10px;">
+            <!-- Fill form to insert new application -->
+            <h3>Add new application</h3>
+            <form action="{{ url_for('add_application') }}" method="post"
+                style="display: flex; flex-direction: column; gap: 15px;">
+                <label>Company: <input type="text" name="company" required></label>
+                <label>Role: <input type="text" name="role" required></label>
+                <!-- Default status is 'Applied' -->
+                <label title="Defaults to today">Date Applied: <input type="date" name="date_applied"></label>
+                <button type="submit" style="width: 120px; ">Add Application</button>
+            </form>
+
+            <!-- Search + Filter -->
+            <h3>Search and Filter</h3>
+            <form method="get" action="{{ url_for('home') }}" style="display: flex; flex-direction: column; gap: 15px;">
+                <label>Search:
+                    <!-- Send 'home' function 'search' -->
+                    <input type="text" name="search" placeholder="Company/Role/Notes..." value="{{ search or '' }}">
+                    <button type="submit">Go</button>
+                </label>
+                <label>Filter by status:
+                    <!-- Send 'home' function 'status_filter' -->
+                    <select name="status_filter" onchange="this.form.submit()">
+                        <option value="">All</option>
+                        <option value="Applied" {% if status_filter=='Applied' %}selected{% endif %}>Applied</option>
+                        <option value="OA1" {% if status_filter=='OA1' %}selected{% endif %}>OA1</option>
+                        <option value="OA2" {% if status_filter=='OA2' %}selected{% endif %}>OA2</option>
+                        <option value="OA3" {% if status_filter=='OA3' %}selected{% endif %}>OA3</option>
+                        <option value="Interview1" {% if status_filter=='Interview1' %}selected{% endif %}>Interview1
+                        </option>
+                        <option value="Interview2" {% if status_filter=='Interview2' %}selected{% endif %}>Interview2
+                        </option>
+                        <option value="Interview3" {% if status_filter=='Interview3' %}selected{% endif %}>Interview3
+                        </option>
+                        <option value="HR Interview" {% if status_filter=='HR Interview' %}selected{% endif %}>HR
+                            Interview</option>
+                        <option value="Technical Interview" {% if status_filter=='Technical Interview' %}selected{%
+                            endif %}>Technical Interview</option>
+                        <option value="Online Interview" {% if status_filter=='Online Interview' %}selected{% endif %}>
+                            Online Interview</option>
+                        <option value="Frontal Interview" {% if status_filter=='Frontal Interview' %}selected{% endif
+                            %}>Frontal Interview</option>
+                        <option value="Final Interview" {% if status_filter=='Final Interview' %}selected{% endif %}>
+                            Final Interview</option>
+                        <option value="Offer" {% if status_filter=='Offer' %}selected{% endif %}>Offer</option>
+                        <option value="Rejected" {% if status_filter=='Rejected' %}selected{% endif %}>Rejected</option>
+                        <option value="No Response" {% if status_filter=='No Response' %}selected{% endif %}>No Response
+                        </option>
+                    </select>
+                </label>
+                <!-- Reset Filters -->
+                <!-- value=1 means the button was clicked -->
+                <button type="submit" name="reset" value="1" style="width: 100px;">Reset Filters</button>
+            </form>
+        </div>
+
+        <!-- Settings -->
+        <div id="settings" style="width: 200px; display: flex; flex-direction: column; gap: 15px;">
+            <h3>Settings</h3>
+            <!-- Auto no-response -->
+            <label title="Automatically add 'No Response' to updates.">
+                <input type="checkbox" id="autoNoResponse"> Auto 'No Response'
+            </label>
+            <!-- Days until auto no-response -->
+            <label title="Number of days until auto 'No Response' is triggered." for="noResponseDays">Days until 'No
+                Response':</label>
+            <input type="number" id="noResponseDays" min="1" value="{{ no_response_days }}" style="width: 40px;">
+            <!-- Inactive at bottom -->
+            <label title="Show inactive applications (Rejected/No Response) at the bottom of the table.">
+                <input type="checkbox" id="inactiveBottom">
+                Inactive at bottom
+            </label>
+            <!-- Dim inactive -->
+            <label title="Dim inactive applications (Rejected/No Response) in the table.">
+                <input type="checkbox" id="dimInactive">
+                Dim inactive
+            </label>
+            <!-- Emails -->
+
+            <label title="Sends an email when a status is automatically changed to 'No Response'.">
+                <input type="checkbox" id="emailNoResponse">
+                Email updates
+            </label>
+            <form id="emailForm">
+                <input type="email" id="emailAddress" style="width: 150px;">
+                <button type="submit" id="emailFormSubmit">Save</button>
+            </form>
+        </div>
+
+        <!-- Settings JavaScript -->
+        <script>
+            const autoNoResponseCheckbox = document.getElementById('autoNoResponse');
+            const noResponseDaysInput = document.getElementById('noResponseDays');
+            const inactiveBottomCheckbox = document.getElementById('inactiveBottom');
+            const dimInactiveCheckbox = document.getElementById('dimInactive');
+            const emailNoResponseCheckbox = document.getElementById('emailNoResponse');
+            const emailAddressInput = document.getElementById('emailAddress');
+
+            // Toggle disabled state of days input
+            function toggleNoReponseDaysInput() {
+                noResponseDaysInput.disabled = !autoNoResponseCheckbox.checked;
+            }
+
+            function syncSettingsToCookies() {
+                document.cookie = "autoNoResponse=" + localStorage.getItem('autoNoResponse') + "; path=/";
+                document.cookie = "noResponseDays=" + localStorage.getItem('noResponseDays') + "; path=/";
+                document.cookie = "inactiveBottom=" + localStorage.getItem('inactiveBottom') + "; path=/";
+                document.cookie = "grayInactive=" + localStorage.getItem('dimInactive') + "; path=/";
+                document.cookie = "emailNoResponse=" + localStorage.getItem('emailNoResponse') + "; path=/";
+                document.cookie = "emailAddress=" + localStorage.getItem('emailAddress') + "; path=/";
+            }
+
+            // Load saved settings
+            window.addEventListener('DOMContentLoaded', () => {
+                // Auto No Response
+                const autoNoResponse = localStorage.getItem('autoNoResponse') === 'true';
+                autoNoResponseCheckbox.checked = autoNoResponse;
+
+                const noResponseDays = localStorage.getItem('noResponseDays');
+                if (noResponseDays) {
+                    noResponseDaysInput.value = noResponseDays;
+                }
+
+                // Set disabled state of days input
+                toggleNoReponseDaysInput();
+
+                // Inactive at bottom
+                const inactiveBottom = localStorage.getItem('inactiveBottom') === 'true';
+                inactiveBottomCheckbox.checked = inactiveBottom;
+
+                // Dim inactive
+                const dimInactive = localStorage.getItem('dimInactive') === 'true';
+                dimInactiveCheckbox.checked = dimInactive;
+                applyDimInactive();
+
+                // Email on auto No Response
+                const emailNoResponse = localStorage.getItem('emailNoResponse') === 'true';
+                emailNoResponseCheckbox.checked = emailNoResponse;
+                emailAddressInput.value = localStorage.getItem('emailAddress') || '';
+
+                // Set disabled state of email input
+                toggleEmailForm();
+
+                // Sync to cookies right away
+                syncSettingsToCookies();
+            });
+
+            // Save when changed + sync to cookies
+            autoNoResponseCheckbox.addEventListener('change', e => {
+                localStorage.setItem('autoNoResponse', e.target.checked);
+                toggleNoReponseDaysInput();
+                syncSettingsToCookies();
+                // location.reload();  // Reload page to apply
+            });
+
+            noResponseDaysInput.addEventListener('input', e => {
+                localStorage.setItem('noResponseDays', e.target.value);
+                syncSettingsToCookies();
+            });
+
+            inactiveBottomCheckbox.addEventListener('change', e => {
+                localStorage.setItem('inactiveBottom', e.target.checked);
+                syncSettingsToCookies();
+                location.reload();  // Reload page to apply
+            });
+
+            dimInactiveCheckbox.addEventListener('change', e => {
+                localStorage.setItem('dimInactive', e.target.checked);
+                syncSettingsToCookies();
+                location.reload();  // Reload page to apply
+            });
+
+            function applyDimInactive() {
+                const rows = document.querySelectorAll('#applicationsTable tr');
+                rows.forEach(row => {
+                    const select = row.querySelector("td:nth-child(3) select");
+                    if (select) {
+                        const status = select.value;
+                        if (status === 'Rejected' || status === 'No Response') {
+                            row.style.opacity = dimInactiveCheckbox.checked ? '0.2' : '1';
+                        } else {
+                            row.style.opacity = '1'; // reset others
+                        }
+                    }
+                });
+            }
+
+            // checkbox for email updates
+            emailNoResponseCheckbox.addEventListener('change', e => {
+                localStorage.setItem('emailNoResponse', e.target.checked);
+                toggleEmailForm();
+                syncSettingsToCookies();
+            });
+
+            // Toggle disabled state of email input
+            function toggleEmailForm() {
+                emailAddressInput.disabled = !emailNoResponseCheckbox.checked;
+                document.getElementById('emailFormSubmit').disabled = emailAddressInput.disabled;
+            }
+
+            // email updates form submission
+            document.getElementById('emailForm').addEventListener('submit', e => {
+                e.preventDefault();  // prevent page reload
+                localStorage.setItem('emailAddress', emailAddressInput.value);
+                syncSettingsToCookies();
+                alert('Email address saved!');
+            });
+        </script>
+
+        <!-- Backup, export, import, merge -->
+        <div style="display: flex; flex-direction: column; gap: 5px;">
+            <h3>Data Management</h3>
+
+            <!-- Export and Backup -->
+            <form action="{{ url_for('export_csv') }}" method="get">
+                <button type="submit" title="Download applications as a CSV file.">
+                    Export CSV
+                </button>
+            </form>
+
+            <form action="{{ url_for('backup') }}" method="get">
+                <button type="submit" title="Download applications as a JSON file.">
+                    Backup JSON
+                </button>
+            </form>
+
+            <!-- Restore / Merge form -->
+            <form title="Upload a backup JSON and choose restore or merge.
+                 - Restore: Wipe current data and replace with backup.
+                 - Merge: Keep current data, add new applications from backup." action="{{ url_for('merge_restore') }}"
+                method="post" enctype="multipart/form-data"
+                onsubmit="return confirm('Proceeding may overwrite or merge data. Are you sure?');"
+                style="display: flex; flex-direction: column; gap: 5px;">
+
+                <input type="file" name="file" accept=".json" required style="width: 75%;">
+
+                <div>
+                    <input type="radio" id="restore" name="mode" value="restore" checked>
+                    <label for="restore">Restore</label>
+                    <br>
+                    <input type="radio" id="merge" name="mode" value="merge">
+                    <label for="merge">Merge</label>
+                </div>
+
+                <button type="submit" style="width: auto; align-self: flex-start;">
+                    Submit
+                </button>
+            </form>
+
+        </div>
+
+        <!-- RIGHT SIDE: Insights (charts + stats)-->
+        <div id="insights" style="display: flex; gap: 20px;">
+            <!-- Pie Chart -->
+            <div style="flex: 1; background-color:#2b2b2b; padding:10px; border-radius:8px;">
+                <h3 style="text-align:center;">Applications by Status</h3>
+                <canvas id="statusPieChart" style="max-width:500px; max-height:200px; margin:auto;"></canvas>
+            </div>
+
+            <!-- Bar Chart – Applications Over Time -->
+            <div style="flex: 1; background-color:#2b2b2b; padding:10px; border-radius:8px;">
+                <h3 style="text-align:center;">Applications Over Time</h3>
+                <canvas id="applicationsOverTimeChart" style="max-width:500px; max-height:200px; margin:auto;"></canvas>
+            </div>
+
+            <!-- Stats -->
+            <div class="stat-card"
+                style="flex: 1.5; background-color:#2b2b2b; padding:10px; border-radius:8px; color:white;">
+                <h3 style="text-align:center;">Stats</h3>
+                <ul id="statsList" style="list-style:none; padding-left:0; text-align:left;">
+                    {% for label, value in stats.items() %}
+                    <li><strong>{{ label }}:</strong> {{ value }}</li>
+                    <br>
+                    {% endfor %}
+                </ul>
+            </div>
+        </div>
+
+        <!-- Toggle Insights Button -->
+        <button id="toggleInsightsBtn" onclick="toggleInsights()" style="width: 100px">
+            Hide Insights
+        </button>
+
+        <!-- JavaScript -->
+        <script>
+            // Toggle insights button
+            function toggleInsights() {
+                const insights = document.getElementById('insights');
+                const btn = document.getElementById('toggleInsightsBtn');
+
+                if (insights.style.visibility === 'hidden') {    // hidden -> shown
+                    insights.style.visibility = 'visible';
+                    btn.textContent = 'Hide Insights';
+                    localStorage.setItem('insightsVisible', 'true');    // save state for page reload
+                }
+                else {  // shown -> hidden
+                    insights.style.visibility = 'hidden';
+                    btn.textContent = 'Show Insights';
+                    localStorage.setItem('insightsVisible', 'false');
+                }
+            };
+
+            // On page load, set insights visibility based on localStorage
+            window.addEventListener('DOMContentLoaded', () => {
+                const insights = document.getElementById('insights');
+                const btn = document.getElementById('toggleInsightsBtn');
+
+                if (localStorage.getItem('insightsVisible') === 'false') {
+                    insights.style.display = 'none';
+                    btn.textContent = 'Show Insights';
+                } else {
+                    insights.style.display = 'flex';
+                    btn.textContent = 'Hide Insights';
+                }
+            });
+
+            // Pie Chart Script – Applications by Status
+            const ctxPie = document.getElementById('statusPieChart').getContext('2d');
+            // Convert Python dict -> JSON -> JS object
+            const statusData = {{ status_data | tojson | safe }};
+
+            new Chart(ctxPie, {
+                type: 'pie',
+                data: {
+                    labels: Object.keys(statusData),    // ["Applied", "Interview", ...]
+                    datasets: [{
+                        data: Object.values(statusData),    // Number of applications per status
+                    }]
+                },
+                options: {
+                    // Show numbers on pie chart (without hover)
+                    plugins: {
+                        datalabels: {
+                            color: '#fff',
+                            font: {
+                                weight: 'bold',
+                                size: 14
+                            },
+                            formatter: (value) => value
+                        }
+                    }
+                },
+                plugins: [ChartDataLabels]
+            });
+
+            // Bar Chart Script – Applications Over Time
+            const ctxBar = document.getElementById('applicationsOverTimeChart').getContext('2d');
+            const weekData = {{ week_data | tojson | safe }};
+            const weekRanges = weekData.map(item => item[2]);
+
+            new Chart(ctxBar, {
+                type: 'bar',
+                data: {
+                    labels: weekData.map(item => item[0]),      // Extract week labels
+                    datasets: [{
+                        label: 'Applications',
+                        data: weekData.map(item => item[1]),    // Extract application counts
+                        backgroundColor: [
+                            '#4e79a7', // blue
+                            '#f28e2b', // orange
+                            '#e15759', // red
+                            '#76b7b2', // teal
+                            '#59a14f', // green
+                            '#edc949', // yellow
+                        ]
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    scales: {
+                        y: {
+                            beginAtZero: true,
+                            ticks: {
+                                stepSize: 1
+                            }
+                        }
+                    },
+                    plugins: {
+                        legend: {
+                            display: false
+                        },
+                        // Show week range on hover
+                        // 'Applications: value (start_date → end_date)'
+                        tooltip: {
+                            callbacks: {
+                                label: function (context) {
+                                    return `Applications: ${context.raw} (${weekRanges[context.dataIndex]})`;
+                                }
+                            }
+                        },
+                        // Show numbers on bars
+                        datalabels: {
+                            color: '#fff',
+                            font: {
+                                weight: 'bold',
+                                size: 12
+                            },
+                            formatter: (value) => value
+                        }
+                    },
+                },
+                plugins: [ChartDataLabels]
+            });
+        </script>
+    </div>
+    </div>
+
+    <!-- ROW 2 -->
+    <div style="margin-top: 30px;">
+        <!-- Application table/database -->
+        <h2>Applications</h2>
+        <table id="applicationsTable" border="1" cellpadding="5">
+            <tr>
+                <!-- Sort by column headers. Passes arguments via URL -->
+                <!-- Clicking the same header toggles asc/desc -->
+                <th title="Company name. Click to sort by ascending/descending order.">
+                    <!-- Company -->
+                    <a
+                        href="{{ url_for('home', sort='company', order='asc' if sort != 'company' or order == 'desc' else 'desc', status_filter=status_filter) }}">
+                        Company
+                        {% if sort == 'company' %}
+                        {% if order == 'asc' %}↑{% else %}↓{% endif %}
+                        {% endif %}
+                    </a>
+                </th>
+                <th title="Job role. Click to sort by ascending/descending order.">
+                    <!-- Role -->
+                    <a
+                        href="{{ url_for('home', sort='role', order='asc' if sort != 'role' or order == 'desc' else 'desc', status_filter=status_filter) }}">
+                        Role
+                        {% if sort == 'role' %}
+                        {% if order == 'asc' %}↑{% else %}↓{% endif %}
+                        {% endif %}
+                    </a>
+                </th>
+                <th title="Current status. Click to sort by ascending/descending order.">
+                    <!-- Status -->
+                    <a
+                        href="{{ url_for('home', sort='status', order='asc' if sort != 'status' or order == 'desc' else 'desc', status_filter=status_filter) }}">
+                        Status
+                        {% if sort == 'status' %}
+                        {% if order == 'asc' %}↑{% else %}↓{% endif %}
+                        {% endif %}
+                    </a>
+                </th>
+                <!-- Updates -->
+                <th title="Status update history.
+                    Automatically updated when status changes, and can be manually edited.
+                    Automatically appends 'No Response' if no updates for 14 days.
+                    Please keep this specific format for the insights to work correctly.">
+                    Updates
+                </th>
+                <!-- Notes -->
+                <th title="Additional notes (e.g. application details, salary expectations).">
+                    Notes
+                </th>
+            </tr>
+            <!-- Show database as table -->
+            {% for app in applications %}
+            <tr>
+                <td>{{ app.company }}</td>
+                <td>{{ app.role }}</td>
+                <td>
+                    <!-- Update status of existing application -->
+                    <form action="{{ url_for('update_status', app_id=app.id) }}" method="post">
+                        <select name="status">
+                            <option value="Applied" {% if app.status=='Applied' %}selected{% endif %}>Applied</option>
+                            <option value="OA1" {% if app.status=='OA1' %}selected{% endif %}>OA1</option>
+                            <option value="OA2" {% if app.status=='OA2' %}selected{% endif %}>OA2</option>
+                            <option value="OA3" {% if app.status=='OA3' %}selected{% endif %}>OA3</option>
+                            <option value="Interview1" {% if app.status=='Interview1' %}selected{% endif %}>Interview1
+                            </option>
+                            <option value="Interview2" {% if app.status=='Interview2' %}selected{% endif %}>Interview2
+                            </option>
+                            <option value="Interview3" {% if app.status=='Interview3' %}selected{% endif %}>Interview3
+                            </option>
+                            <option value="HR Interview" {% if app.status=='HR Interview' %}selected{% endif %}>HR
+                                Interview</option>
+                            <option value="Technical Interview" {% if app.status=='Technical Interview' %}selected{%
+                                endif %}>Technical Interview</option>
+                            <option value="Online Interview" {% if app.status=='Online Interview' %}selected{% endif %}>
+                                Online Interview</option>
+                            <option value="Frontal Interview" {% if app.status=='Frontal Interview' %}selected{% endif
+                                %}>Frontal Interview</option>
+                            <option value="Final Interview" {% if app.status=='Final Interview' %}selected{% endif %}>
+                                Final Interview</option>
+                            <option value="Offer" {% if app.status=='Offer' %}selected{% endif %}>Offer</option>
+                            <option value="Rejected" {% if app.status=='Rejected' %}selected{% endif %}>Rejected
+                            </option>
+                            <option value="No Response" {% if app.status=='No Response' %}selected{% endif %}>No
+                                Response</option>
+                        </select>
+                        <button type="submit">Update</button>
+                    </form>
+                </td>
+                <td>
+                    <!-- Update updates of existing application -->
+                    <form action="{{ url_for('update_updates', app_id=app.id) }}" method="post">
+                        <textarea name="updates" rows="4" cols="30">{{ app.updates or "" }}</textarea>
+                        <button type="submit">Save</button>
+                    </form>
+                </td>
+                <td>
+                    <!-- Update notes of existing application -->
+                    <form action="{{ url_for('update_notes', app_id=app.id) }}" method="post">
+                        <textarea name="notes" rows="4">{{ app.notes or "" }}</textarea>
+                        <button type="submit">Save</button>
+                    </form>
+                </td>
+                <td>
+                    <!-- Delete button to remove application -->
+                    <form action="{{ url_for('delete_application', app_id=app.id) }}" method="post"
+                        style="display:inline;">
+                        <!-- Confirm before deleting -->
+                        <button type="submit"
+                            onclick="return confirm('Are you sure you want to delete this application?')">Delete</button>
+                    </form>
+                    <br>
+                    <br>
+                    <!-- Duplicate button to copy application -->
+                    <form action="{{ url_for('duplicate_application', app_id=app.id) }}" method="post"
+                        style="display:inline;">
+                        <button type="submit">Duplicate</button>
+                    </form>
+                </td>
+            </tr>
+            {% endfor %}
+        </table>
+    </div>
+    <br>
+
+
+    <!-- Watermark -->
+    <div
+        style="position: fixed; bottom: 5px; right: 10px; font-size: 10px; color: #888; opacity: 0.5; pointer-events: none;">
+        © 2025 Job Tracker by
+        <a href="https://www.linkedin.com/in/ido-hassidim-12705125b/"
+            style="color: inherit; text-decoration: underline; pointer-events: auto;" target="_blank">Ido Hassidim</a>
+</body>
