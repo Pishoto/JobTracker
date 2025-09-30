@@ -249,11 +249,9 @@ def rejection_percentage(applications):
     total_apps = len(applications)
     num_rej = 0
     for app in applications:
-        updates = app["updates"].split("\n")
-        for upd in updates:
-            if upd.startswith("Rejected"):
-                num_rej += 1
-                break
+        status = app["status"].lower()
+        if status in ["rejected", "no response"]:
+            num_rej += 1
 
     # avoid division by zero
     rej_pct = (num_rej / total_apps * 100) if total_apps else 0
