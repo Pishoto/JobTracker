@@ -496,7 +496,12 @@ def update_updates(app_id):
 @app.route("/backup")
 def backup():
     applications = fetch_all_applications()
-    return jsonify(applications)
+    json_data = json.dumps(applications, indent=4)
+    return Response(
+        json_data, 
+        mimetype="application/json",
+        headers={"Content-Disposition": "attachment; filename=applications_backup.json"}
+    )
 
 # export database to CSV
 @app.route("/export_csv")
