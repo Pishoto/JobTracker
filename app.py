@@ -128,7 +128,7 @@ def update_no_response(applications, no_response_days, email_no_response=None, e
                         # send email
                         if email_no_response == "true" and email_address:
                             # --- email does not work with Render ---
-
+                            pass
                             # subject = f"Job Tracker Update"
                             # body_html = f"""
                             #     <p>Hello, your application to <strong>{app['company']}</strong> for the role of <strong>{app['role']}</strong>
