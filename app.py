@@ -22,9 +22,9 @@ AUTO_NO_RESPONSE = True
 
 # configure Flask-Mail
 app.config["MAIL_SERVER"] = "smtp.gmail.com"
-app.config["MAIL_PORT"] = 587
-app.config["MAIL_USE_TLS"] = True
-app.config["MAIL_USE_SSL"] = False
+app.config["MAIL_PORT"] = 465
+app.config["MAIL_USE_TLS"] = False
+app.config["MAIL_USE_SSL"] = True
 app.config["MAIL_USERNAME"] = os.getenv('MAIL_USERNAME')
 app.config["MAIL_PASSWORD"] = os.getenv('MAIL_PASSWORD')    # no hacking!
 app.config["MAIL_DEFAULT_SENDER"] = os.getenv("MAIL_USERNAME")
@@ -127,22 +127,24 @@ def update_no_response(applications, no_response_days, email_no_response=None, e
 
                         # send email
                         if email_no_response == "true" and email_address:
-                            subject = f"Job Tracker Update"
-                            body_html = f"""
-                                <p>Hello, your application to <strong>{app['company']}</strong> for the role of <strong>{app['role']}</strong>
-                                has been marked as 'No Response' after {days_diff} days without updates.</p>
+                            # --- email does not work with Render ---
 
-                                <hr>
-                                <p style="font-family: monospace; font-size: 1.2em; color: #555;">
-                                This is an automated message from the "Job Tracker" app,
-                                made by <a href="https://www.linkedin.com/in/ido-hassidim-12705125b/" target="_blank">Ido Hassidim</a>
-                                </p>
-                                """
-                            try:
-                                msg = Message(subject, recipients=[email_address], html=body_html)
-                                mail.send(msg)
-                            except Exception as e:
-                                print(f"Error sending email: {e}")
+                            # subject = f"Job Tracker Update"
+                            # body_html = f"""
+                            #     <p>Hello, your application to <strong>{app['company']}</strong> for the role of <strong>{app['role']}</strong>
+                            #     has been marked as 'No Response' after {days_diff} days without updates.</p>
+
+                            #     <hr>
+                            #     <p style="font-family: monospace; font-size: 1.2em; color: #555;">
+                            #     This is an automated message from the "Job Tracker" app,
+                            #     made by <a href="https://www.linkedin.com/in/ido-hassidim-12705125b/" target="_blank">Ido Hassidim</a>
+                            #     </p>
+                            #     """
+                            # try:
+                            #     msg = Message(subject, recipients=[email_address], html=body_html)
+                            #     mail.send(msg)
+                            # except Exception as e:
+                            #     print(f"Error sending email: {e}")
 
                 except (IndexError, ValueError):
                     continue

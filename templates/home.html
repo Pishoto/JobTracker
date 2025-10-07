@@ -287,6 +287,8 @@
                 localStorage.setItem('emailAddress', emailAddressInput.value);
                 syncSettingsToCookies();
                 alert('Email address saved!');
+
+                flash("Automatic email updates are disabled on Render :(", "Notice");
             });
         </script>
 
