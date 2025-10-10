@@ -75,7 +75,7 @@
 
 <body>
     <!-- Title -->
-    <h1>Welcome to Job Tracker!</h1>
+    <h1>Welcome to Job Tracker, {{ username }}!</h1>
 
     <!-- Divide to left and right sides -->
     <div id="application_form" style="display: flex; align-items: flex-start; gap: 40px;">
@@ -361,10 +361,17 @@
             </div>
         </div>
 
-        <!-- Toggle Insights Button -->
-        <button id="toggleInsightsBtn" onclick="toggleInsights()" style="width: 100px">
-            Hide Insights
-        </button>
+        <div style="text-align: center;">
+            <!-- Toggle Insights Button -->
+            <button id="toggleInsightsBtn" onclick="toggleInsights()" style="width: 100px">
+                Hide Insights
+            </button>
+            <br><br>
+            <!-- Logout Button -->
+            <form action="{{ url_for('logout') }}" method="get">
+                <button type="submit">Logout</button>
+            </form>
+        </div>
 
         <!-- JavaScript -->
         <script>

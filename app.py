@@ -1,7 +1,7 @@
 import csv
 from io import StringIO
 import os
-from flask import Flask, Response, json, jsonify, render_template, request, redirect, url_for
+from flask import Flask, Response, flash, json, jsonify, render_template, request, redirect, session, url_for
 from flask_mail import Mail, Message
 import sqlite3
 from datetime import datetime, timedelta
@@ -9,6 +9,7 @@ from collections import Counter
 from dotenv import load_dotenv
 
 app = Flask(__name__)
+app.secret_key = "ILoveDucks"
 
 load_dotenv()  # load environment variables
 
@@ -30,14 +31,24 @@ app.config["MAIL_PASSWORD"] = os.getenv('MAIL_PASSWORD')    # no hacking!
 app.config["MAIL_DEFAULT_SENDER"] = os.getenv("MAIL_USERNAME")
 mail = Mail(app)
 
-# connect to database jobs.db
+# connect to databases file
 def get_conn():
-    return sqlite3.connect("jobs.db")
+    return sqlite3.connect("databases.db")
 
 # initialize database if doesn't exist
 def init_db():
     with get_conn() as conn:
         cur = conn.cursor()
+        # users table
+        cur.execute("""
+            CREATE TABLE IF NOT EXISTS users (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                username TEXT NOT NULL UNIQUE,
+                password TEXT NOT NULL
+            )
+        """)
+
+        # applications table
         cur.execute("""
             CREATE TABLE IF NOT EXISTS applications (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -45,9 +56,12 @@ def init_db():
                 role TEXT NOT NULL,
                 status TEXT NOT NULL,
                 updates TEXT,
-                notes TEXT
+                notes TEXT,
+                user_id INTEGER,
+                FOREIGN KEY (user_id) REFERENCES users(id)
             )
         """)
+
         conn.commit()
 
 # initialize database before first request
@@ -265,10 +279,18 @@ def rejection_percentage(applications):
         rej_pct_str = f"{round(rej_pct, 1)}%"
 
     return rej_pct_str
+   
 
 # homepage
 @app.route("/") 
 def home():
+    # logged in user gets id
+    if "user_id" not in session:
+        return redirect("/login")
+    
+    user_id = session["user_id"]
+    username = session.get("username")
+
     # get user settings from cookies
     auto_no_response, no_response_days, inactive_bottom, email_no_response, email_address = get_user_settings()
 
@@ -281,7 +303,7 @@ def home():
         order = request.args.get("order")                   # asc or desc
         search = request.args.get("search")                 # search term
 
-    applications = get_applications(status_filter, sort, order, search)
+    applications = get_applications(user_id, status_filter, sort, order, search)
 
     # auto update no response statuses
     if auto_no_response:    # skip if disabled
@@ -318,11 +340,12 @@ def home():
         search=search,
         status_data=status_data,
         week_data=week_data,
-        stats=stats
+        stats=stats,
+        username=username
     )
 
 # fetch all entries from database and apply filters, sorting, searching
-def get_applications(status_filter=None, sort=None, order=None, search=None):
+def get_applications(user_id, status_filter=None, sort=None, order=None, search=None):
     with get_conn() as conn:
         cur = conn.cursor()
 
@@ -338,8 +361,8 @@ def get_applications(status_filter=None, sort=None, order=None, search=None):
             sort_order = order
 
         base_query = "SELECT id, company, role, status, updates, notes FROM applications"
-        conditions = []
-        params = []
+        conditions = ["user_id = ?"]
+        params = [user_id]
 
         if status_filter:
             # filter by status and sort by selected column
@@ -399,6 +422,11 @@ def fetch_all_applications():
 # add new entry to database
 @app.route("/add", methods=["POST"])
 def add_application():
+    if "user_id" not in session:
+        return redirect("/login")
+    
+    user_id = session["user_id"]
+
     # get form data (html)
     company = request.form.get("company")
     role = request.form.get("role")
@@ -415,8 +443,8 @@ def add_application():
         with get_conn() as conn:
             cur = conn.cursor()
             cur.execute(
-                "INSERT INTO applications (company, role, status, updates, notes) VALUES (?, ?, ?, ?, ?)",
-                (company, role, "Applied", updates, "")
+                "INSERT INTO applications (company, role, status, updates, notes, user_id) VALUES (?, ?, ?, ?, ?, ?)",
+                (company, role, "Applied", updates, "", user_id)
             )
             conn.commit()
     return redirect(url_for("home"))
@@ -424,9 +452,15 @@ def add_application():
 # delete entry from database
 @app.route("/delete/<int:app_id>", methods=["POST"])
 def delete_application(app_id):
+    if "user_id" not in session:
+        return redirect("/login")
+    
+    user_id = session["user_id"]
+    
     with get_conn() as conn:
         cur = conn.cursor()
-        cur.execute("DELETE FROM applications WHERE id = ?", (app_id,))
+        # ensure user can only delete their own entries (extra safe)
+        cur.execute("DELETE FROM applications WHERE id = ? AND user_id = ?", (app_id, user_id))
         conn.commit()
     return redirect(url_for("home"))
 
@@ -610,3 +644,69 @@ def merge_restore():
             conn.commit()
 
     return redirect(url_for("home"))
+
+
+@app.route("/register", methods=["GET", "POST"])
+def register():
+    # user submitted registration form (POST)
+    if (request.method == "POST"):
+        username = request.form["username"]
+        password = request.form["password"]
+        confirm_password = request.form["confirm_password"]
+
+        if password != confirm_password:
+            # does not delete entered data
+            return render_template(
+                "register.html",
+                error="Passwords do not match",
+                username=username,
+                password=password,
+                confirm_password=confirm_password
+            )
+
+        with get_conn() as conn:
+            cur = conn.cursor()
+            try:
+                cur.execute("INSERT into users (username, password) VALUES (?, ?)", (username, password))
+                conn.commit()
+                # store user id in session
+                session["user_id"] = cur.lastrowid
+                session["username"] = username
+                return redirect(url_for("home"))
+            except sqlite3.IntegrityError:
+                return render_template("register.html", error="Username taken")
+    # user opens registeration page (GET) 
+    else:
+        return render_template("register.html")
+
+
+@app.route("/login", methods=["GET", "POST"])
+def login():
+    # user submitted login form (POST)
+    if (request.method == "POST"):
+        username = request.form["username"]
+        password = request.form["password"]
+
+        with get_conn() as conn:
+            cur = conn.cursor()
+            # filter users.db to find if user exists
+            cur.execute("SELECT id FROM users where username = ? AND password = ?", (username, password))
+            user_data = cur.fetchone()
+            
+            if (user_data):
+                # user exists
+                session["user_id"] = user_data[0]   # id from users
+                session["username"] = username
+                return redirect(url_for("home"))
+            else:
+                # user doesn't exist or wrong password
+                return render_template("login.html", error="Invalid username or password")
+    # user opens login page (GET)
+    else:
+        return render_template("login.html")
+    
+
+@app.route("/logout")
+def logout():
+    session.clear() # remove user_id, username, etc.
+    return redirect(url_for("login"))
