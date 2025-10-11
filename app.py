@@ -7,6 +7,7 @@ import sqlite3
 from datetime import datetime, timedelta
 from collections import Counter
 from dotenv import load_dotenv
+import psycopg2
 
 app = Flask(__name__)
 app.secret_key = "ILoveDucks"
@@ -33,7 +34,14 @@ mail = Mail(app)
 
 # connect to databases file
 def get_conn():
-    return sqlite3.connect("databases.db")
+    db_url = os.environ.get("DATABASE_URL")
+    if db_url:
+        # running on Render → use PostgreSQL
+        return psycopg2.connect(db_url)
+    else:
+        # running locally → use SQLite
+        return sqlite3.connect("databases.db")
+
 
 # initialize database if doesn't exist
 def init_db():
