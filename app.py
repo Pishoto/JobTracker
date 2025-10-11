@@ -513,15 +513,16 @@ def duplicate_application(app_id):
     with get_conn() as conn:
         cur = conn.cursor()
         p = "%s" if os.environ.get("DATABASE_URL") else "?"
+        user_id = session.get("user_id")
         # fetch the application to duplicate
-        cur.execute(f"SELECT company, role, status, updates, notes FROM applications WHERE id = {p}", (app_id,))
+        cur.execute(f"SELECT company, role, status, updates, notes FROM applications WHERE id = {p} AND user_id = {p}", (app_id, user_id))
         row = cur.fetchone()
         if row:
             company, role, status, updates, notes = row
             # insert a new entry with the same data
             cur.execute(
-                f"INSERT INTO applications (company, role, status, updates, notes) VALUES ({p}, {p}, {p}, {p}, {p})",
-                (company, role, status, updates, notes)
+                f"INSERT INTO applications (company, role, status, updates, notes, user_id) VALUES ({p}, {p}, {p}, {p}, {p}, {p})",
+                (company, role, status, updates, notes, user_id)
             )
             conn.commit()
     return redirect(url_for("home"))
