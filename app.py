@@ -45,32 +45,65 @@ def get_conn():
 
 # initialize database if doesn't exist
 def init_db():
-    with get_conn() as conn:
-        cur = conn.cursor()
-        # users table
-        cur.execute("""
-            CREATE TABLE IF NOT EXISTS users (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                username TEXT NOT NULL UNIQUE,
-                password TEXT NOT NULL
-            )
-        """)
+    db_url = os.environ.get("DATABASE_URL")
 
-        # applications table
-        cur.execute("""
-            CREATE TABLE IF NOT EXISTS applications (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                company TEXT NOT NULL,
-                role TEXT NOT NULL,
-                status TEXT NOT NULL,
-                updates TEXT,
-                notes TEXT,
-                user_id INTEGER,
-                FOREIGN KEY (user_id) REFERENCES users(id)
-            )
-        """)
+    if (not db_url):
+        # SQLite
+        with get_conn() as conn:
+            cur = conn.cursor()
+            # users table
+            cur.execute("""
+                CREATE TABLE IF NOT EXISTS users (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    username TEXT NOT NULL UNIQUE,
+                    password TEXT NOT NULL
+                )
+            """)
 
-        conn.commit()
+            # applications table
+            cur.execute("""
+                CREATE TABLE IF NOT EXISTS applications (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    company TEXT NOT NULL,
+                    role TEXT NOT NULL,
+                    status TEXT NOT NULL,
+                    updates TEXT,
+                    notes TEXT,
+                    user_id INTEGER,
+                    FOREIGN KEY (user_id) REFERENCES users(id)
+                )
+            """)
+
+            conn.commit()
+    else:
+        # PostgreSQL
+        with get_conn() as conn:
+            cur = conn.cursor()
+            # users table
+            cur.execute("""
+                CREATE TABLE IF NOT EXISTS users (
+                    id SERIAL PRIMARY KEY,
+                    username VARCHAR(20) NOT NULL UNIQUE,
+                    password VARCHAR(20) NOT NULL
+                )
+            """)
+
+            # applications table
+            cur.execute("""
+                CREATE TABLE IF NOT EXISTS applications (
+                    id SERIAL PRIMARY KEY,
+                    company VARCHAR(30) NOT NULL,
+                    role VARCHAR(30) NOT NULL,
+                    status VARCHAR(30) NOT NULL,
+                    updates TEXT,
+                    notes TEXT,
+                    user_id INTEGER,
+                    FOREIGN KEY (user_id) REFERENCES users(id)
+                )
+            """)
+
+            conn.commit()
+
 
 # initialize database before first request
 init_db()
