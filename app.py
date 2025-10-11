@@ -104,7 +104,6 @@ def init_db():
 
             conn.commit()
 
-
 # initialize database before first request
 init_db()
 
@@ -163,6 +162,7 @@ def update_no_response(applications, no_response_days, email_no_response=None, e
     today = datetime.now()
     with get_conn() as conn:
         cur = conn.cursor()
+        p = "%s" if os.environ.get("DATABASE_URL") else "?"
         for app in applications:
             updates = app["updates"].split("\n")
             if updates:
@@ -176,8 +176,8 @@ def update_no_response(applications, no_response_days, email_no_response=None, e
                         new_update = f"No Response{UPDATES_SEPERATOR}{today.strftime(DATE_FORMAT)}"
                         new_updates_text = app["updates"].strip() + "\n" + new_update
                         # update in database
-                        cur.execute("UPDATE applications SET status = ?, updates = ? WHERE id = ?", 
-                                    ("No Response", new_updates_text, app["id"]))
+                        cur.execute(f"UPDATE applications SET status = {p}, updates = {p} WHERE id = {p}", 
+                                        ("No Response", new_updates_text, app["id"]))
                         conn.commit()
 
                         # send email
@@ -389,6 +389,7 @@ def home():
 def get_applications(user_id, status_filter=None, sort=None, order=None, search=None):
     with get_conn() as conn:
         cur = conn.cursor()
+        p = "%s" if os.environ.get("DATABASE_URL") else "?"
 
         valid_sort_cols = {"company", "role", "status"}
         valid_sort_orders = {"asc", "desc"}
@@ -402,17 +403,17 @@ def get_applications(user_id, status_filter=None, sort=None, order=None, search=
             sort_order = order
 
         base_query = "SELECT id, company, role, status, updates, notes FROM applications"
-        conditions = ["user_id = ?"]
+        conditions = ["user_id = " + p]  # always filter by user_id
         params = [user_id]
 
         if status_filter:
             # filter by status and sort by selected column
-            conditions.append("status = ?")
+            conditions.append("status = " + p)
             params.append(status_filter)
 
         if search:
             # search in company, role, or notes
-            conditions.append("(company LIKE ? OR role LIKE ? OR notes LIKE ?)")
+            conditions.append(f"(company LIKE {p} OR role LIKE {p} OR notes LIKE {p})")
             params.extend([f"%{search}%", f"%{search}%", f"%{search}%"])
 
         if conditions:
@@ -483,10 +484,11 @@ def add_application():
     if company and role:
         with get_conn() as conn:
             cur = conn.cursor()
+            p = "%s" if os.environ.get("DATABASE_URL") else "?"
             cur.execute(
-                "INSERT INTO applications (company, role, status, updates, notes, user_id) VALUES (?, ?, ?, ?, ?, ?)",
+                f"INSERT INTO applications (company, role, status, updates, notes, user_id) VALUES ({p}, {p}, {p}, {p}, {p}, {p})",
                 (company, role, "Applied", updates, "", user_id)
-            )
+            ) 
             conn.commit()
     return redirect(url_for("home"))
 
@@ -500,8 +502,8 @@ def delete_application(app_id):
     
     with get_conn() as conn:
         cur = conn.cursor()
-        # ensure user can only delete their own entries (extra safe)
-        cur.execute("DELETE FROM applications WHERE id = ? AND user_id = ?", (app_id, user_id))
+        p = "%s" if os.environ.get("DATABASE_URL") else "?"
+        cur.execute(f"DELETE FROM applications WHERE id = {p} AND user_id = {p}", (app_id, user_id))
         conn.commit()
     return redirect(url_for("home"))
 
@@ -510,14 +512,15 @@ def delete_application(app_id):
 def duplicate_application(app_id):
     with get_conn() as conn:
         cur = conn.cursor()
+        p = "%s" if os.environ.get("DATABASE_URL") else "?"
         # fetch the application to duplicate
-        cur.execute("SELECT company, role, status, updates, notes FROM applications WHERE id = ?", (app_id,))
+        cur.execute(f"SELECT company, role, status, updates, notes FROM applications WHERE id = {p}", (app_id,))
         row = cur.fetchone()
         if row:
             company, role, status, updates, notes = row
             # insert a new entry with the same data
             cur.execute(
-                "INSERT INTO applications (company, role, status, updates, notes) VALUES (?, ?, ?, ?, ?)",
+                f"INSERT INTO applications (company, role, status, updates, notes) VALUES ({p}, {p}, {p}, {p}, {p})",
                 (company, role, status, updates, notes)
             )
             conn.commit()
@@ -530,9 +533,10 @@ def update_status(app_id):
     if new_status:
         with get_conn() as conn:
             cur = conn.cursor()
+            p = "%s" if os.environ.get("DATABASE_URL") else "?"
             # when status is updated, automatically append to updates
             # get current updates
-            cur.execute("SELECT updates FROM applications WHERE id = ?", (app_id,))
+            cur.execute(f"SELECT updates FROM applications WHERE id = {p}", (app_id,))
             row = cur.fetchone()
             current_updates = row[0] if row and row[0] else ""
             # append new update
@@ -544,8 +548,9 @@ def update_status(app_id):
                 new_updates_text = new_update
 
             # update both status and updates
-            cur.execute("UPDATE applications SET status = ?, updates = ? WHERE id = ?", 
-                        (new_status, new_updates_text, app_id))
+            cur.execute(f"UPDATE applications SET status = {p}, updates = {p} WHERE id = {p}", 
+                    (new_status, new_updates_text, app_id))
+
             conn.commit()
     return redirect(url_for("home"))
 
@@ -555,7 +560,8 @@ def update_notes(app_id):
     new_notes = request.form.get("notes")
     with get_conn() as conn:
         cur = conn.cursor()
-        cur.execute("UPDATE applications SET notes = ? WHERE id = ?", (new_notes, app_id))
+        p = "%s" if os.environ.get("DATABASE_URL") else "?"
+        cur.execute(f"UPDATE applications SET notes = {p} WHERE id = {p}", (new_notes, app_id))
         conn.commit()
     return redirect(url_for("home"))
 
@@ -565,7 +571,8 @@ def update_updates(app_id):
     new_updates = request.form.get("updates")
     with get_conn() as conn:
         cur = conn.cursor()
-        cur.execute("UPDATE applications SET updates = ? WHERE id = ?", (new_updates, app_id))
+        p = "%s" if os.environ.get("DATABASE_URL") else "?"
+        cur.execute(f"UPDATE applications SET updates = {p} WHERE id = {p}", (new_updates, app_id))
         conn.commit()
     return redirect(url_for("home"))
 
@@ -627,6 +634,7 @@ def merge_restore():
 
     with get_conn() as conn:
         cur = conn.cursor()
+        p = "%s" if os.environ.get("DATABASE_URL") else "?"
 
         if mode == "restore":
             # WARNING: wipe current data
@@ -637,9 +645,9 @@ def merge_restore():
 
             for app in data_sorted:
                 cur.execute(
-                    """
+                    f"""
                     INSERT INTO applications (id, company, role, status, updates, notes)
-                    VALUES (?, ?, ?, ?, ?, ?)
+                    VALUES ({p}, {p}, {p}, {p}, {p}, {p})
                     """,
                     (app["id"], app["company"], app["role"], app["status"], 
                      app.get("updates", ""), app.get("notes", ""))
@@ -663,21 +671,21 @@ def merge_restore():
 
             for app in combined_sorted:
                 # handle ID conflicts by letting SQLite assign a new ID
-                cur.execute("SELECT id FROM applications WHERE id=?", (app["id"],))
+                cur.execute(f"SELECT id FROM applications WHERE id = {p}", (app["id"],))
                 if cur.fetchone():
                     cur.execute(
-                        """
+                        f"""
                         INSERT INTO applications (company, role, status, updates, notes)
-                        VALUES (?, ?, ?, ?, ?)
+                        VALUES ({p}, {p}, {p}, {p}, {p})
                         """,
                         (app["company"], app["role"], app["status"], 
                          app.get("updates", ""), app.get("notes", ""))
                     )
                 else:
                     cur.execute(
-                        """
+                        f"""
                         INSERT INTO applications (id, company, role, status, updates, notes)
-                        VALUES (?, ?, ?, ?, ?, ?)
+                        VALUES ({p}, {p}, {p}, {p}, {p}, {p})
                         """,
                         (app["id"], app["company"], app["role"], app["status"], 
                          app.get("updates", ""), app.get("notes", ""))
@@ -707,8 +715,9 @@ def register():
 
         with get_conn() as conn:
             cur = conn.cursor()
+            p = "%s" if os.environ.get("DATABASE_URL") else "?"
             try:
-                cur.execute("INSERT into users (username, password) VALUES (?, ?)", (username, password))
+                cur.execute(f"INSERT into users (username, password) VALUES ({p}, {p})", (username, password))
                 conn.commit()
                 # store user id in session
                 session["user_id"] = cur.lastrowid
@@ -730,8 +739,9 @@ def login():
 
         with get_conn() as conn:
             cur = conn.cursor()
+            p = "%s" if os.environ.get("DATABASE_URL") else "?"
             # filter users.db to find if user exists
-            cur.execute("SELECT id FROM users where username = ? AND password = ?", (username, password))
+            cur.execute(f"SELECT id FROM users where username = {p} AND password = {p}", (username, password))
             user_data = cur.fetchone()
             
             if (user_data):
