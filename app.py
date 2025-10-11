@@ -717,13 +717,21 @@ def register():
             cur = conn.cursor()
             p = "%s" if os.environ.get("DATABASE_URL") else "?"
             try:
-                cur.execute(f"INSERT into users (username, password) VALUES ({p}, {p})", (username, password))
+                if p == "%s":
+                    cur.execute(f"INSERT into users (username, password) VALUES ({p}, {p}) RETURNING id",
+                                 (username, password))
+                    user_id = cur.fetchone()[0]
+                else:
+                    cur.execute(f"INSERT into users (username, password) VALUES ({p}, {p})", 
+                                (username, password))
+                    user_id = cur.lastrowid
                 conn.commit()
                 # store user id in session
-                session["user_id"] = cur.lastrowid
+                session["user_id"] = user_id
                 session["username"] = username
                 return redirect(url_for("home"))
-            except sqlite3.IntegrityError:
+            
+            except Exception as e:
                 return render_template("register.html", error="Username taken")
     # user opens registeration page (GET) 
     else:
