@@ -1,0 +1,6 @@
+<body>
+    <form action="{{ url_for('delete_all_apps') }}" method="post">
+        <button type="submit"
+            onclick="return confirm('ARE YOU SURE?')">Delete All</button>
+    </form>
+</body>

@@ -321,6 +321,16 @@ def rejection_percentage(applications):
 
     return rej_pct_str
    
+# add application without html form
+def add_app(company, role, status, updates, notes, user_id):
+    with get_conn() as conn:
+        cur = conn.cursor()
+        p = "%s" if os.environ.get("DATABASE_URL") else "?"
+        cur.execute(
+            f"INSERT INTO applications (company, role, status, updates, notes, user_id) VALUES ({p}, {p}, {p}, {p}, {p}, {p})",
+            (company, role, status, updates, notes, user_id)
+        )
+        conn.commit()
 
 # homepage
 @app.route("/") 
@@ -441,10 +451,11 @@ def get_applications(user_id, status_filter=None, sort=None, order=None, search=
         return applications
     
 # fetch all entries from database, returns as list of dicts
-def fetch_all_applications():
+def get_user_apps(user_id):
     with get_conn() as conn:
         cur = conn.cursor()
-        cur.execute("SELECT id, company, role, status, updates, notes FROM applications")
+        p = "%s" if os.environ.get("DATABASE_URL") else "?"
+        cur.execute(f"SELECT id, company, role, status, updates, notes FROM applications WHERE user_id = {p}", (user_id,))
         rows = cur.fetchall()
 
         applications = [
@@ -460,6 +471,12 @@ def fetch_all_applications():
         ]
 
         return applications
+    
+def delete_all_apps():
+    with get_conn() as conn:
+        cur = conn.cursor()
+        cur.execute("DELETE FROM applications")
+        conn.commit()
 
 # add new entry to database
 @app.route("/add", methods=["POST"])
@@ -580,7 +597,7 @@ def update_updates(app_id):
 # backup database
 @app.route("/backup")
 def backup():
-    applications = fetch_all_applications()
+    applications = get_user_apps(session["user_id"])
     json_data = json.dumps(applications, indent=4)
     return Response(
         json_data, 
@@ -591,7 +608,7 @@ def backup():
 # export database to CSV
 @app.route("/export_csv")
 def export_csv():
-    applications = fetch_all_applications()
+    applications = get_user_apps(session["user_id"])
     output = StringIO()
     writer = csv.writer(output)
     writer.writerow(["ID", "Company", "Role", "Status", "Updates", "Notes"])
@@ -616,13 +633,14 @@ def export_csv():
         headers={"Content-Disposition": "attachment;filename=applications.csv"}
     )
 
-# restore database from backup
+# restore database from backup or merge with existing data
 @app.route("/merge_restore", methods=["POST"])
 def merge_restore():
     file = request.files['file']
     data = json.load(file)  # list of dicts with original ids
-    mode = request.form.get("mode")  # 'restore' or 'merge'
+    mode = request.form.get("backup_mode")  # 'restore' or 'merge'
 
+    # extract apply date from updates for sorting
     def get_apply_date(app_dict):
                 updates = app_dict.get("updates", "")
                 applied_line = updates.split("\n")[0] if updates else ""
@@ -631,33 +649,35 @@ def merge_restore():
                     date = parse_date(date_str)
                     return date
                 else:
-                    return datetime.min  # treat missing dates as very old
+                    return datetime.today()  # treat missing dates as today
 
     with get_conn() as conn:
         cur = conn.cursor()
         p = "%s" if os.environ.get("DATABASE_URL") else "?"
+        user_id = session.get("user_id")
 
         if mode == "restore":
-            # WARNING: wipe current data
-            cur.execute("DELETE FROM applications")
+            # WARNING: wipe current user data
+            cur.execute(f"DELETE FROM applications WHERE user_id = {p}", (user_id,))
             conn.commit()
 
             data_sorted = sorted(data, key=get_apply_date, reverse=True)  # newest first
 
+            # insert backup apps with new IDs
             for app in data_sorted:
                 cur.execute(
                     f"""
-                    INSERT INTO applications (id, company, role, status, updates, notes)
+                    INSERT INTO applications (company, role, status, updates, notes, user_id)
                     VALUES ({p}, {p}, {p}, {p}, {p}, {p})
                     """,
-                    (app["id"], app["company"], app["role"], app["status"], 
-                     app.get("updates", ""), app.get("notes", ""))
+                    (app["company"], app["role"], app["status"],
+                     app.get("updates", ""), app.get("notes", ""), user_id)
                 )
             conn.commit()
 
         elif mode == "merge":
-            # fetch existing applications
-            cur.execute("SELECT * FROM applications")
+            # fetch existing user applications
+            cur.execute(f"SELECT * FROM applications WHERE user_id = {p}", (user_id,))
             existing_apps = [dict(zip([col[0] for col in cur.description], row)) for row in cur.fetchall()]
 
             # combine existing + new entries
@@ -666,31 +686,20 @@ def merge_restore():
             # sort combined list by apply date descending
             combined_sorted = sorted(combined_apps, key=get_apply_date, reverse=True)
 
-            # clear DB and insert combined sorted list
-            cur.execute("DELETE FROM applications")
+            # clear current user data and insert combined sorted list
+            cur.execute(f"DELETE FROM applications WHERE user_id = {p}", (user_id,))
             conn.commit()
 
             for app in combined_sorted:
-                # handle ID conflicts by letting SQLite assign a new ID
-                cur.execute(f"SELECT id FROM applications WHERE id = {p}", (app["id"],))
-                if cur.fetchone():
-                    cur.execute(
-                        f"""
-                        INSERT INTO applications (company, role, status, updates, notes)
-                        VALUES ({p}, {p}, {p}, {p}, {p})
-                        """,
-                        (app["company"], app["role"], app["status"], 
-                         app.get("updates", ""), app.get("notes", ""))
-                    )
-                else:
-                    cur.execute(
-                        f"""
-                        INSERT INTO applications (id, company, role, status, updates, notes)
-                        VALUES ({p}, {p}, {p}, {p}, {p}, {p})
-                        """,
-                        (app["id"], app["company"], app["role"], app["status"], 
-                         app.get("updates", ""), app.get("notes", ""))
-                    )
+                # give new IDs to all apps
+                cur.execute(
+                    f"""
+                    INSERT INTO applications (company, role, status, updates, notes, user_id)
+                    VALUES ({p}, {p}, {p}, {p}, {p}, {p})
+                    """,
+                    (app["company"], app["role"], app["status"],
+                        app.get("updates", ""), app.get("notes", ""), user_id)
+                )
             conn.commit()
 
     return redirect(url_for("home"))
@@ -770,3 +779,8 @@ def login():
 def logout():
     session.clear() # remove user_id, username, etc.
     return redirect(url_for("login"))
+
+
+@app.route("/admin")
+def admin():
+    return redirect(url_for("admin"))
