@@ -1,6 +1,17 @@
 <body>
-    <form action="{{ url_for('delete_all_apps') }}" method="post">
-        <button type="submit"
-            onclick="return confirm('ARE YOU SURE?')">Delete All</button>
-    </form>
+    <h1>Admin Panel</h1>
+
+    <div class="container">
+        <form action="/admin/delete_all" method="post" onsubmit="return confirm('ARE YOU SURE?')">
+            <button type="submit" class="delete">Delete All Applications</button>
+        </form>
+
+        <form action="/admin/delete_all_users" method="post" onsubmit="return confirm('ARE YOU SURE?')">
+            <button type="submit" class="delete">Delete All Users</button>
+        </form>
+
+        <form action="/admin/logout" method="post">
+            <button type="submit" class="logout">Logout (Admin)</button>
+        </form>
+    </div>
 </body>

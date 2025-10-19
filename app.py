@@ -471,12 +471,7 @@ def get_user_apps(user_id):
         ]
 
         return applications
-    
-def delete_all_apps():
-    with get_conn() as conn:
-        cur = conn.cursor()
-        cur.execute("DELETE FROM applications")
-        conn.commit()
+
 
 # add new entry to database
 @app.route("/add", methods=["POST"])
@@ -783,4 +778,25 @@ def logout():
 
 @app.route("/admin")
 def admin():
-    return redirect(url_for("admin"))
+    return render_template("admin.html")
+
+@app.route("/admin/delete_all", methods=["POST"])
+def admin_delete_all_apps():
+    with get_conn() as conn:
+        cur = conn.cursor()
+        cur.execute("DELETE FROM applications")
+        conn.commit()
+    return redirect("admin.html")
+
+@app.route("/admin/delete_all_users", methods=["POST"])
+def admin_delete_all_users():
+    with get_conn() as conn:
+        cur = conn.cursor()
+        cur.execute("DELETE FROM users")
+        conn.commit()
+    return redirect("admin.html")
+
+@app.route("/admin/logout", methods=["POST"])
+def admin_logout():
+    session.clear()
+    return redirect(url_for("login"))
