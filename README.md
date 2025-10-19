@@ -20,10 +20,10 @@ Job Tracker lets you:
 ------------------------------------------------------------
 
 ## Tech
-Frontend: HTML, CSS, JavaScript
-Backend: Flask (Python)
-Database: SQLite / PostgreSQL (depending on environment)
-Deployment: Render
+- Frontend: HTML, CSS, JavaScript
+- Backend: Flask (Python)
+- Database: SQLite / PostgreSQL (depending on environment)
+- Deployment: Render
 
 ------------------------------------------------------------
 
