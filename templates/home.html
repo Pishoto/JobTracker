@@ -536,10 +536,10 @@
                     </a>
                 </th>
                 <!-- Updates -->
-                <th title="Status update history.
+                <th
+                    title="Status update history.
                     Automatically updated when status changes, and can be manually edited.
-                    Automatically appends 'No Response' if no updates for 14 days.
-                    Please keep this specific format for the insights to work correctly.">
+                    If 'Auto No Response' is enabled in settings, 'No Response' will be added here after specified days of inactivity.">
                     Updates
                 </th>
                 <!-- Notes -->
@@ -586,12 +586,128 @@
                     </form>
                 </td>
                 <td>
-                    <!-- Update updates of existing application -->
-                    <form action="{{ url_for('update_updates', app_id=app.id) }}" method="post">
-                        <textarea name="updates" rows="4" cols="30">{{ app.updates or "" }}</textarea>
-                        <button type="submit">Save</button>
-                    </form>
+                    <!-- Show current updates -->
+                    <div id="show_updates_{{ app.id }}">
+                        {% for upd in app.updates %}
+                        <div>{{ upd.status }} - {{ upd.date }}</div>
+                        {% endfor %}
+                    </div>
+
+                    <!-- Button to open the updates editor -->
+                    <button type="button" onclick="open_updates_modal({{ app.id }})">Manage Updates</button>
+
+                    <!-- Modal -->
+                    <div id="updates_modal_{{ app.id }}" class="updates_modal" style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; 
+         background:rgba(0,0,0,0.4); justify-content:center; align-items:center; z-index:1000;">
+                        <div
+                            style="background: #2e2e2e; padding:16px; border-radius:8px; max-width:500px; width:90%; max-height:80%; overflow-y:auto; position:relative;">
+                            <h3>Manage Updates</h3>
+                            <form action="{{ url_for('update_updates', app_id=app.id) }}" method="post"
+                                id="updates_form_{{ app.id }}">
+                                <div class="updates_list">
+                                    {% for upd in app.updates %}
+                                    <div class="update_row"
+                                        style="display:flex; gap:4px; margin-bottom:4px; align-items:center;">
+                                        <select name="status">
+                                            <option value="Applied" {% if upd.status=='Applied' %}selected{% endif %}>
+                                                Applied</option>
+                                            <option value="OA1" {% if upd.status=='OA1' %}selected{% endif %}>OA1
+                                            </option>
+                                            <option value="OA2" {% if upd.status=='OA2' %}selected{% endif %}>OA2
+                                            </option>
+                                            <option value="OA3" {% if upd.status=='OA3' %}selected{% endif %}>OA3
+                                            </option>
+                                            <option value="Interview1" {% if upd.status=='Interview1' %}selected{% endif
+                                                %}>Interview1</option>
+                                            <option value="Interview2" {% if upd.status=='Interview2' %}selected{% endif
+                                                %}>Interview2</option>
+                                            <option value="Interview3" {% if upd.status=='Interview3' %}selected{% endif
+                                                %}>Interview3</option>
+                                            <option value="HR Interview" {% if upd.status=='HR Interview' %}selected{%
+                                                endif %}>HR Interview</option>
+                                            <option value="Technical Interview" {% if upd.status=='Technical Interview'
+                                                %}selected{% endif %}>Technical Interview</option>
+                                            <option value="Online Interview" {% if upd.status=='Online Interview'
+                                                %}selected{% endif %}>Online Interview</option>
+                                            <option value="Frontal Interview" {% if upd.status=='Frontal Interview'
+                                                %}selected{% endif %}>Frontal Interview</option>
+                                            <option value="Final Interview" {% if upd.status=='Final Interview'
+                                                %}selected{% endif %}>Final Interview</option>
+                                            <option value="Offer" {% if upd.status=='Offer' %}selected{% endif %}>Offer
+                                            </option>
+                                            <option value="Rejected" {% if upd.status=='Rejected' %}selected{% endif %}>
+                                                Rejected</option>
+                                            <option value="No Response" {% if upd.status=='No Response' %}selected{%
+                                                endif %}>No Response</option>
+                                        </select>
+                                        <input type="date" name="date" value="{{ upd.date | format_date_for_input }}">
+                                        <button type="button" onclick="delete_update_row(this)">Delete</button>
+                                    </div>
+                                    {% endfor %}
+                                </div>
+                                <button type="button" onclick="add_update_row({{ app.id }})" style="margin-top:8px;">+
+                                    Add Update</button>
+                                <div style="margin-top:12px; display:flex; justify-content:flex-end; gap:8px;">
+                                    <button type="button" onclick="close_updates_modal({{ app.id }})">Cancel</button>
+                                    <button type="submit">Save</button>
+                                </div>
+                            </form>
+                        </div>
+                    </div>
                 </td>
+                <!-- Updates editor JavaScript -->
+                <script>
+                    function open_updates_modal(app_id) {
+                        document.getElementById(`updates_modal_${app_id}`).style.display = 'flex';
+                    }
+
+                    function close_updates_modal(app_id) {
+                        document.getElementById(`updates_modal_${app_id}`).style.display = 'none';
+                    }
+
+                    function add_update_row(app_id) {
+                        const listDiv = document.querySelector(`#updates_modal_${app_id} .updates_list`);
+                        const today = new Date();
+                        const yyyy = today.getFullYear();
+                        const mm = String(today.getMonth() + 1).padStart(2, '0');
+                        const dd = String(today.getDate()).padStart(2, '0');
+                        const todayStr = `${yyyy}-${mm}-${dd}`;
+
+                        const newRow = document.createElement('div');
+                        newRow.className = 'update_row';
+                        newRow.style.display = 'flex';
+                        newRow.style.gap = '4px';
+                        newRow.style.marginBottom = '4px';
+                        newRow.style.alignItems = 'center';
+                        newRow.innerHTML = `
+                            <select name="status">
+                                <option value="Applied">Applied</option>
+                                <option value="OA1">OA1</option>
+                                <option value="OA2">OA2</option>
+                                <option value="OA3">OA3</option>
+                                <option value="Interview1">Interview1</option>
+                                <option value="Interview2">Interview2</option>
+                                <option value="Interview3">Interview3</option>
+                                <option value="HR Interview">HR Interview</option>
+                                <option value="Technical Interview">Technical Interview</option>
+                                <option value="Online Interview">Online Interview</option>
+                                <option value="Frontal Interview">Frontal Interview</option>
+                                <option value="Final Interview">Final Interview</option>
+                                <option value="Offer">Offer</option>
+                                <option value="Rejected">Rejected</option>
+                                <option value="No Response">No Response</option>
+                            </select>
+                            <input type="date" name="date" value="${todayStr}">
+                            <button type="button" onclick="delete_update_row(this)">Delete</button>
+                        `;
+                        listDiv.appendChild(newRow);
+                    }
+
+                    function delete_update_row(button) {
+                        button.parentElement.remove();
+                    }
+                </script>
+
                 <td>
                     <!-- Update notes of existing application -->
                     <form action="{{ url_for('update_notes', app_id=app.id) }}" method="post">

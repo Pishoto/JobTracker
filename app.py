@@ -8,6 +8,7 @@ from datetime import datetime, timedelta
 from collections import Counter
 from dotenv import load_dotenv
 import psycopg2
+import json
 
 app = Flask(__name__)
 app.secret_key = "ILoveDucks"
@@ -41,7 +42,6 @@ def get_conn():
     else:
         # running locally → use SQLite
         return sqlite3.connect("databases.db")
-
 
 # initialize database if doesn't exist
 def init_db():
@@ -137,6 +137,19 @@ def get_user_settings():
 
     return auto_no_response, no_response_days, inactive_bottom, email_no_response, email_address
 
+# convert any updates input into a list
+def parse_updates(input):
+    if not input:
+        return []
+    if isinstance(input, list):
+        return input  # already parsed
+    if isinstance(input, str):
+        try:
+            return json.loads(input)
+        except json.JSONDecodeError:
+            pass
+    return []
+
 # parse dates
 def parse_date(date_str, as_datetime=True):
     """Parse a date string in various formats.
@@ -163,46 +176,46 @@ def update_no_response(applications, no_response_days, email_no_response=None, e
     with get_conn() as conn:
         cur = conn.cursor()
         p = "%s" if os.environ.get("DATABASE_URL") else "?"
+
         for app in applications:
-            updates = app["updates"].split("\n")
-            if updates:
-                last_update = updates[-1]
-                try:
-                    last_date_str = last_update.split(UPDATES_SEPERATOR)[1]
-                    last_date = parse_date(last_date_str)
-                    days_diff = (today - last_date).days
-                    if days_diff > no_response_days and not last_update.startswith("No Response"):
-                        # append No Response update
-                        new_update = f"No Response{UPDATES_SEPERATOR}{today.strftime(DATE_FORMAT)}"
-                        new_updates_text = app["updates"].strip() + "\n" + new_update
-                        # update in database
-                        cur.execute(f"UPDATE applications SET status = {p}, updates = {p} WHERE id = {p}", 
-                                        ("No Response", new_updates_text, app["id"]))
-                        conn.commit()
+            updates = parse_updates(app["updates"])
+            if not updates:
+                continue
 
-                        # send email
-                        if email_no_response == "true" and email_address:
-                            # --- email does not work with Render ---
-                            pass
-                            # subject = f"Job Tracker Update"
-                            # body_html = f"""
-                            #     <p>Hello, your application to <strong>{app['company']}</strong> for the role of <strong>{app['role']}</strong>
-                            #     has been marked as 'No Response' after {days_diff} days without updates.</p>
+            last_update = updates[-1]
+            last_status = last_update.get("status")
+            last_date = parse_date(last_update.get("date"))
+            days_diff = (today - last_date).days
 
-                            #     <hr>
-                            #     <p style="font-family: monospace; font-size: 1.2em; color: #555;">
-                            #     This is an automated message from the "Job Tracker" app,
-                            #     made by <a href="https://www.linkedin.com/in/ido-hassidim-12705125b/" target="_blank">Ido Hassidim</a>
-                            #     </p>
-                            #     """
-                            # try:
-                            #     msg = Message(subject, recipients=[email_address], html=body_html)
-                            #     mail.send(msg)
-                            # except Exception as e:
-                            #     print(f"Error sending email: {e}")
+            if days_diff > no_response_days and last_status not in ["No Response", "Rejected"]:
+                # append No Response update
+                updates.append({"status": "No Response", "date": today.strftime(DATE_FORMAT)})
+                new_updates = json.dumps(updates)
+                # update in database
+                cur.execute(f"UPDATE applications SET status = {p}, updates = {p} WHERE id = {p}", 
+                            ("No Response", new_updates, app["id"]))
+                conn.commit()
 
-                except (IndexError, ValueError):
-                    continue
+                # send email
+                if email_no_response == "true" and email_address:
+                    # --- email does not work with Render ---
+                    if p == "?":
+                        subject = f"Job Tracker Update"
+                        body_html = f"""
+                            <p>Hello, your application to <strong>{app['company']}</strong> for the role of <strong>{app['role']}</strong>
+                            has been marked as 'No Response' after {days_diff} days without updates.</p>
+
+                            <hr>
+                            <p style="font-family: monospace; font-size: 1.2em; color: #555;">
+                            This is an automated message from the "Job Tracker" app,
+                            made by <a href="https://www.linkedin.com/in/ido-hassidim-12705125b/" target="_blank">Ido Hassidim</a>
+                            </p>
+                            """
+                        try:
+                            msg = Message(subject, recipients=[email_address], html=body_html)
+                            mail.send(msg)
+                        except Exception as e:
+                            print(f"Error sending email: {e}")
 
 # data for pie chart
 def get_chart1_data(applications):
@@ -214,12 +227,11 @@ def get_chart2_data(applications):
     # extract 'applied' dates from updates (bar chart)
     applied_dates = []
     for app in applications:
-        updates = app["updates"].split("\n")
-        for upd in updates:
-            if upd.startswith("Applied - "):
-                date_str = upd.split(" - ")[1]
-                applied_dates.append(parse_date(date_str))
-                break  # only the first "Applied" entry is needed
+        updates = parse_updates(app["updates"])
+
+        if updates and updates[0]["status"] == "Applied":
+            applied_date = parse_date(updates[0]["date"])
+            applied_dates.append(applied_date)
 
     # count applications per week
     week_counts = Counter()
@@ -249,7 +261,7 @@ def get_chart2_data(applications):
     week_data = list(zip(week_labels, week_values, week_ranges))
     return week_data
 
-# total amount of applications
+# total amount of applications for specific user
 def total_applications(applications):
     return len(applications)
 
@@ -257,9 +269,9 @@ def total_applications(applications):
 def apps_in_process(applications):
     count = 0
     for app in applications:
-        updates = app["updates"].split("\n")
+        updates = parse_updates(app["updates"])
         for upd in updates:
-            if upd.startswith("Rejected") or upd.startswith("No Response"):
+            if upd["status"] == "Rejected" or upd["status"] == "No Response":
                 count += 1
                 break
     
@@ -274,18 +286,25 @@ def avg_first_response_time(applications):
         if not app["updates"]:
             continue
 
-        lines = app["updates"].split("\n")
+        updates = parse_updates(app["updates"])
         # not enough info
-        if len(lines) < 2:
+        if len(updates) < 2:
             continue
 
-        applied_line = lines[0]
-        first_response_line = lines[1]
+        applied_date_str = updates[0]["date"] if updates[0]["status"] == "Applied" else None
+        # skip if no applied date
+        if not applied_date_str:
+            continue
+
+        first_response_str = updates[1]["date"] if updates[1]["status"] != "No Response" else None
+        # skip if no first response
+        if not first_response_str:
+            continue
 
         # get as date object from updates
-        applied_date = parse_date(applied_line.split(UPDATES_SEPERATOR)[1])
-        first_response_date = parse_date(first_response_line.split(UPDATES_SEPERATOR)[1]) 
-        diff_days = (first_response_date - applied_date).days   
+        applied_date = parse_date(applied_date_str)
+        first_response_date = parse_date(first_response_str)
+        diff_days = (first_response_date - applied_date).days
         diffs.append(diff_days)
 
     if diffs:
@@ -320,7 +339,7 @@ def rejection_percentage(applications):
         rej_pct_str = f"{round(rej_pct, 1)}%"
 
     return rej_pct_str
-   
+
 # add application without html form
 def add_app(company, role, status, updates, notes, user_id):
     with get_conn() as conn:
@@ -442,7 +461,7 @@ def get_applications(user_id, status_filter=None, sort=None, order=None, search=
                 "company": row[1],
                 "role": row[2],
                 "status": row[3],
-                "updates": row[4],
+                "updates": parse_updates(row[4]),
                 "notes": row[5]
             }
             for row in rows
@@ -464,7 +483,7 @@ def get_user_apps(user_id):
                 "company": row[1],
                 "role": row[2],
                 "status": row[3],
-                "updates": row[4],
+                "updates": parse_updates(row[4]),
                 "notes": row[5]
             }
             for row in rows
@@ -472,6 +491,47 @@ def get_user_apps(user_id):
 
         return applications
 
+# initialize updates with first line
+def init_updates(status, date):
+    return json.dumps([{"status": status, "date": date}])
+
+# add update line to existing updates
+def add_update(app_id, status, date):
+    with get_conn() as conn:
+        cur = conn.cursor()
+        p = "%s" if os.environ.get("DATABASE_URL") else "?"
+        cur.execute(f"SELECT updates FROM applications WHERE id = {p}", (app_id,))
+        row = cur.fetchone()
+        updates = json.loads(row[0]) if row and row[0] else []
+        updates.append({"status": status, "date": date})
+        cur.execute(f"UPDATE applications SET updates = {p} WHERE id = {p}", (json.dumps(updates), app_id))
+        conn.commit()
+
+# sort updates by date descending
+def sort_updates(app_id):
+    with get_conn() as conn:
+        cur = conn.cursor()
+        p = "%s" if os.environ.get("DATABASE_URL") else "?"
+        cur.execute(f"SELECT updates FROM applications WHERE id = {p}", (app_id,))
+        row = cur.fetchone()
+        updates = json.loads(row[0]) if row and row[0] else []
+        # sort by date ascending
+        updates.sort(key=lambda x: parse_date(x["date"]))
+        cur.execute(f"UPDATE applications SET updates = {p} WHERE id = {p}", (json.dumps(updates), app_id))
+        conn.commit()
+
+# return applied date
+def get_apply_date(app_id):
+    with get_conn() as conn:
+        cur = conn.cursor()
+        p = "%s" if os.environ.get("DATABASE_URL") else "?"
+        cur.execute(f"SELECT updates FROM applications WHERE id = {p}", (app_id,))
+        row = cur.fetchone()
+        first_update = json.loads(row[0]) if row and row[0] else []
+        if first_update and first_update[0]["status"] == "Applied":
+            return parse_date(first_update[0]["date"])
+
+    return None # no apply date found
 
 # add new entry to database
 @app.route("/add", methods=["POST"])
@@ -491,7 +551,7 @@ def add_application():
     else:   # format date to default format
         date_applied = parse_date(date_applied, False)  # string format
 
-    updates = f"Applied - {date_applied}"
+    updates = init_updates("Applied", date_applied)
 
     if company and role:
         with get_conn() as conn:
@@ -531,7 +591,7 @@ def duplicate_application(app_id):
         row = cur.fetchone()
         if row:
             company, role, status, updates, notes = row
-            # insert a new entry with the same data
+            # insert a new entry with the same data, different app_id
             cur.execute(
                 f"INSERT INTO applications (company, role, status, updates, notes, user_id) VALUES ({p}, {p}, {p}, {p}, {p}, {p})",
                 (company, role, status, updates, notes, user_id)
@@ -539,32 +599,22 @@ def duplicate_application(app_id):
             conn.commit()
     return redirect(url_for("home"))
 
-# update status of an entry
+# update status of an entry and append to updates
 @app.route("/update/<int:app_id>", methods=["POST"])
 def update_status(app_id):
     new_status = request.form.get("status")
+
     if new_status:
+        date_now = datetime.now().strftime(DATE_FORMAT)
+        add_update(app_id, new_status, date_now)
+        sort_updates(app_id)
+
         with get_conn() as conn:
             cur = conn.cursor()
             p = "%s" if os.environ.get("DATABASE_URL") else "?"
-            # when status is updated, automatically append to updates
-            # get current updates
-            cur.execute(f"SELECT updates FROM applications WHERE id = {p}", (app_id,))
-            row = cur.fetchone()
-            current_updates = row[0] if row and row[0] else ""
-            # append new update
-            new_update = f"{new_status} - {datetime.now().strftime(DATE_FORMAT)}"
-
-            if current_updates.strip():
-                new_updates_text = current_updates.strip() + "\n" + new_update
-            else:
-                new_updates_text = new_update
-
-            # update both status and updates
-            cur.execute(f"UPDATE applications SET status = {p}, updates = {p} WHERE id = {p}", 
-                    (new_status, new_updates_text, app_id))
-
+            cur.execute(f"UPDATE applications SET status = {p} WHERE id = {p}", (new_status, app_id))
             conn.commit()
+
     return redirect(url_for("home"))
 
 # update notes of an entry
@@ -576,17 +626,38 @@ def update_notes(app_id):
         p = "%s" if os.environ.get("DATABASE_URL") else "?"
         cur.execute(f"UPDATE applications SET notes = {p} WHERE id = {p}", (new_notes, app_id))
         conn.commit()
+
     return redirect(url_for("home"))
 
 # update updates of an entry
 @app.route("/update_updates/<int:app_id>", methods=["POST"])
 def update_updates(app_id):
-    new_updates = request.form.get("updates")
+    # get lists from the form
+    statuses = request.form.getlist("status")
+    dates = request.form.getlist("date")
+
+    updates_list = []
+    for status, date in zip(statuses, dates):
+        status = status.strip()
+        date = date.strip()
+        if status and date:
+            updates_list.append({"status": status, "date": parse_date(date, as_datetime=False)})
+
+    # sort by date ascending
+    updates_list.sort(key=lambda x: parse_date(x["date"]))
+
+    # fetch current updates
     with get_conn() as conn:
         cur = conn.cursor()
         p = "%s" if os.environ.get("DATABASE_URL") else "?"
-        cur.execute(f"UPDATE applications SET updates = {p} WHERE id = {p}", (new_updates, app_id))
+        cur.execute(f"SELECT updates FROM applications WHERE id = {p}", (app_id,))
+        # save to database
+        cur.execute(
+            f"UPDATE applications SET updates = {p} WHERE id = {p}",
+            (json.dumps(updates_list), app_id)
+        )
         conn.commit()
+
     return redirect(url_for("home"))
 
 # backup database
@@ -609,7 +680,8 @@ def export_csv():
     writer.writerow(["ID", "Company", "Role", "Status", "Updates", "Notes"])
 
     for app in applications:
-        updates_txt = app.get("updates", "")
+        updates_txt = "; ".join(f"{u['status']} - {u['date']}" for u in app.get("updates", [])) # readable
+        # updates_txt = json.dumps(app.get("updates", []))  # raw JSON
         notes_txt = app.get("notes", "")
 
         writer.writerow([
@@ -635,17 +707,6 @@ def merge_restore():
     data = json.load(file)  # list of dicts with original ids
     mode = request.form.get("backup_mode")  # 'restore' or 'merge'
 
-    # extract apply date from updates for sorting
-    def get_apply_date(app_dict):
-                updates = app_dict.get("updates", "")
-                applied_line = updates.split("\n")[0] if updates else ""
-                if applied_line not in ("", None) and UPDATES_SEPERATOR in applied_line:
-                    date_str = applied_line.split(UPDATES_SEPERATOR)[1]
-                    date = parse_date(date_str)
-                    return date
-                else:
-                    return datetime.today()  # treat missing dates as today
-
     with get_conn() as conn:
         cur = conn.cursor()
         p = "%s" if os.environ.get("DATABASE_URL") else "?"
@@ -656,17 +717,19 @@ def merge_restore():
             cur.execute(f"DELETE FROM applications WHERE user_id = {p}", (user_id,))
             conn.commit()
 
-            data_sorted = sorted(data, key=get_apply_date, reverse=True)  # newest first
-
             # insert backup apps with new IDs
-            for app in data_sorted:
+            for app in data:
                 cur.execute(
                     f"""
                     INSERT INTO applications (company, role, status, updates, notes, user_id)
                     VALUES ({p}, {p}, {p}, {p}, {p}, {p})
                     """,
-                    (app["company"], app["role"], app["status"],
-                     app.get("updates", ""), app.get("notes", ""), user_id)
+                    (app["company"], 
+                     app["role"], 
+                     app["status"],
+                     json.dumps(app.get("updates", [])),
+                     app.get("notes", ""), 
+                     user_id)
                 )
             conn.commit()
 
@@ -675,25 +738,30 @@ def merge_restore():
             cur.execute(f"SELECT * FROM applications WHERE user_id = {p}", (user_id,))
             existing_apps = [dict(zip([col[0] for col in cur.description], row)) for row in cur.fetchall()]
 
+            # normalize updates from JSON strings to python lists
+            for app in existing_apps:
+                app["updates"] = parse_updates(app["updates"])
+
             # combine existing + new entries
             combined_apps = existing_apps + data
 
-            # sort combined list by apply date descending
-            combined_sorted = sorted(combined_apps, key=get_apply_date, reverse=True)
-
-            # clear current user data and insert combined sorted list
+            # clear current user data and insert combined list
             cur.execute(f"DELETE FROM applications WHERE user_id = {p}", (user_id,))
             conn.commit()
 
-            for app in combined_sorted:
+            for app in combined_apps:
                 # give new IDs to all apps
                 cur.execute(
                     f"""
                     INSERT INTO applications (company, role, status, updates, notes, user_id)
                     VALUES ({p}, {p}, {p}, {p}, {p}, {p})
                     """,
-                    (app["company"], app["role"], app["status"],
-                        app.get("updates", ""), app.get("notes", ""), user_id)
+                    (app["company"], 
+                     app["role"], 
+                     app["status"],
+                     json.dumps(app.get("updates", [])),
+                     app.get("notes", ""), 
+                     user_id)
                 )
             conn.commit()
 
@@ -800,3 +868,14 @@ def admin_delete_all_users():
 def admin_logout():
     session.clear()
     return redirect(url_for("login"))
+
+@app.template_filter('format_date_for_input')
+def format_date_for_input(date_str):
+    """convert DD/MM/YYYY -> YYYY-MM-DD for input type=date"""
+    if not date_str:
+        return ''
+    try:
+        day, month, year = date_str.split('/')
+        return f"{year}-{month.zfill(2)}-{day.zfill(2)}"
+    except Exception:
+        return ''
